@@ -169,8 +169,8 @@ class Dataset:
             dataset_dir = os.path.join(dataset_dir, subset)
 
         # Load all images from de subset
-        for filename in sorted(os.listdir(dataset_dir), reverse=True):
-            img = cv2.imread(os.path.join(dataset_dir, filename))
+        for filename in sorted(os.listdir(directory), reverse=True):
+            img = cv2.imread(os.path.join(directory, filename))
             if img is not None:
                 self.images.append(img)
 

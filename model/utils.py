@@ -11,6 +11,7 @@ import cv2
 import os
 import re
 import gc
+import itertools
 
 
 ##################################################
@@ -146,6 +147,29 @@ def draw_rectangle(image, coordinates, occupied):
 # Dataset                                                #
 ##########################################################
 
+
+def image_generator(dataset_dir):
+    temp = None
+
+    # Load all images from de subset
+    for filename in sorted(os.listdir(dataset_dir), reverse=True):
+        if filename.endswith(".xml"):
+            temp = os.path.join(dataset_dir, filename)
+            continue
+        else:
+            img = cv2.imread(os.path.join(dataset_dir, filename))
+            assert temp is not None
+            yield img, temp
+
+
+# def image_generator(dataset_dir):
+#     # Load all images from de subset
+#     for filename in sorted(os.listdir(dataset_dir), reverse=True):
+#         img = cv2.imread(os.path.join(dataset_dir, filename))
+#         if img is not None:
+#             yield img
+
+
 class Dataset:
     """
     Class responsible for process the dataset
@@ -154,7 +178,7 @@ class Dataset:
     def __init__(self, xml_path):
         self.min_size = None
         self.y_true = []
-        self.images = []
+        self.images = None
         self.pt_A, self.pt_B, self.pt_C, self.pt_D, _ = get_points_from_xml(xml_path)
 
     def load_custom(self, dataset_dir, subset=None):
@@ -163,18 +187,12 @@ class Dataset:
         subset: Subset to load: val or train
         """
 
-        # Train, validation or predicts dataset?
+        # train, validation or predicts dataset?
         if subset is not None:
             assert subset in ["val", "train", "predicts"]
             dataset_dir = os.path.join(dataset_dir, subset)
 
-        # Load all images from de subset
-        for filename in sorted(os.listdir(dataset_dir), reverse=True):
-            img = cv2.imread(os.path.join(dataset_dir, filename))
-            if img is not None:
-                self.images.append(img)
-
-        # Calculate the min size for later resize
+        self.images = image_generator(dataset_dir)
         self.get_min_size()
 
     def dataset_example(self, quantity):
@@ -194,9 +212,10 @@ class Dataset:
         """
         Calculate the min size of the dataset images
         """
+        img, _ = next(self.images)
 
         # Crop all parking lot spots on the image
-        cropped_image = get_images_spaces(self.images[0], self.pt_A,
+        cropped_image = get_images_spaces(img, self.pt_A,
                                           self.pt_B, self.pt_C, self.pt_D)
 
         # Run through the data looking for the smaller image size
@@ -213,11 +232,8 @@ class Dataset:
         :return y_true: y value for all cropped images, indicating occupation status
         """
 
-        cropped_images = []
-        y_true = []
-
         # Crop and resize all spots by the minimum size of the dataset
-        for img in self.images:
+        for img, xml_file in self.images:
             # TODO: Add Night Filter
             # if condition:
             #     img = night_filter(img)
@@ -229,29 +245,66 @@ class Dataset:
             # Normalize all pixels values
             crop = crop / 255.0
 
-            cropped_images.extend(crop)
+            _, _, _, _, y = get_points_from_xml(xml_file)
 
-        # Get y value from the images in the dataset
-        for filename in sorted(os.listdir(xml_path), reverse=True):
+            # Transform y value to be accepted by the model
+            for i in range(len(y)):
+                y[i] = np.array([1, 0]) if y[i] == 1 else np.array([0, 1])
 
-            if not filename.endswith('.xml'):
-                continue
+            for i in range(len(crop)):
+                crop[i] = np.expand_dims(crop[i], axis=0)
+                y[i] = np.expand_dims(y[i], axis=0)
+                yield crop[i], y[i]
 
-            fullname = os.path.join(xml_path, filename)
-            _, _, _, _, y = get_points_from_xml(fullname)
-            y_true.extend(y)
 
-        # Transform y value to be accepted by the model
-        for i in range(len(y_true)):
-            if y_true[i] == 1:
-                y_true[i] = np.array([0, 1])
-            else:
-                y_true[i] = np.array([1, 0])
-
-        cropped_images = np.array(cropped_images)
-        y_true = np.array(y_true)
-
-        return cropped_images, y_true
+    # def create_cropped_list(self, xml_path):
+    #     """
+    #     Create a cropped list containing all the spots in the dataset images
+    #
+    #     :param xml_path: Folder path containing all coordinates for each image spots
+    #     :return cropped_images: Cropped spots from all images in the dataset
+    #     :return y_true: y value for all cropped images, indicating occupation status
+    #     """
+    #
+    #     cropped_images = []
+    #     y_true = []
+    #
+    #     # Crop and resize all spots by the minimum size of the dataset
+    #     for img in self.images:
+    #         # TODO: Add Night Filter
+    #         # if condition:
+    #         #     img = night_filter(img)
+    #
+    #         crop = np.array(get_images_spaces(img, self.pt_A, self.pt_B,
+    #                                           self.pt_C, self.pt_D))
+    #         resize_image(crop, self.min_size[1], self.min_size[0])
+    #
+    #         # Normalize all pixels values
+    #         crop = crop / 255.0
+    #
+    #         cropped_images.extend(crop)
+    #
+    #     # Get y value from the images in the dataset
+    #     for filename in sorted(os.listdir(xml_path), reverse=True):
+    #
+    #         if not filename.endswith('.xml'):
+    #             continue
+    #
+    #         fullname = os.path.join(xml_path, filename)
+    #         _, _, _, _, y = get_points_from_xml(fullname)
+    #         y_true.extend(y)
+    #
+    #     # Transform y value to be accepted by the model
+    #     for i in range(len(y_true)):
+    #         if y_true[i] == 1:
+    #             y_true[i] = np.array([0, 1])
+    #         else:
+    #             y_true[i] = np.array([1, 0])
+    #
+    #     cropped_images = np.array(cropped_images)
+    #     y_true = np.array(y_true)
+    #
+    #     return cropped_images, y_true
 
     def draw_all_rectangles(self, predicts):
         """

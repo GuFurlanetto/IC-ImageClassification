@@ -131,16 +131,24 @@ class CNN:
         # If XML file is provided, extract cropped spots and y value for Training and validation
         # Else utilize provided data already cropped
         if xml_dir is not None:
-            cropped_image, y_true = training_dataset.create_cropped_list(xml_dir)
-            cropped_image_val, y_true_val = val_dataset.create_cropped_list(xml_dir_val)
+            data_train = training_dataset.create_cropped_list(xml_dir)
+            print("Train Dataset size:", len([g for g in data_train]))
+            data_val = val_dataset.create_cropped_list(xml_dir_val)
+            print("Val Dataset size:", len([g for g in data_val]))
         else:
             cropped_image, y_true = np.array(training_dataset.images), np.array(training_dataset.y_true)
             cropped_image_val, y_true_val = np.array(val_dataset.images), np.array(val_dataset.y_true)
+        # if xml_dir is not None:
+        #     cropped_image, y_true = training_dataset.create_cropped_list(xml_dir)
+        #     cropped_image_val, y_true_val = val_dataset.create_cropped_list(xml_dir_val)
+        # else:
+        #     cropped_image, y_true = np.array(training_dataset.images), np.array(training_dataset.y_true)
+        #     cropped_image_val, y_true_val = np.array(val_dataset.images), np.array(val_dataset.y_true)
 
-        # Train the model using hyper-parameter in the Config
-        return self.model.fit(cropped_image, y_true, epochs=self.config.EPOCHS,
-                              validation_data=(cropped_image_val, y_true_val),
-                              shuffle=self.config.SHUFFLE, callbacks=cp_callback
+        # train the model using hyper-parameter in the Config
+        return self.model.fit(data_train, epochs=self.config.EPOCHS,
+                              validation_data=(data_val),
+                              shuffle=self.config.SHUFFLE, callbacks=cp_callback,
                               )
 
     def detect(self, predicts_data, xml_path=None, weight_path=None):

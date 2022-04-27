@@ -37,7 +37,7 @@ class Config:
     # This doesn't need to match the size of the training set. Tensorboard
     # updates are saved at the end of each epoch, so setting this to a
     # smaller number means getting more frequent TensorBoard updates.
-    # Val stats are also calculated at each epoch end and they
+    # val stats are also calculated at each epoch end and they
     # might take a while, so don't set this too small to avoid spending
     # a lot of time on validation stats.
     STEPS_PER_EPOCH = 1000

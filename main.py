@@ -22,7 +22,7 @@ print("Val data loaded\n")
 
 my_config = Config()
 my_config.LEARNING_RATE = 0.01
-my_config.EPOCHS = 20
+my_config.EPOCHS = 10
 my_config.ARCHITECTURE = 'cnn'
 
 print("Building model ...")

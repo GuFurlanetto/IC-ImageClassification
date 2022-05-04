@@ -4,6 +4,7 @@ from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Conv2D, \
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.callbacks import ModelCheckpoint
 from tensorflow.keras.optimizers import SGD
+import tensorflow as tf
 from datetime import timedelta, timezone, datetime
 from model.config import save_config, load_config
 import numpy as np
@@ -131,10 +132,22 @@ class CNN:
         # If XML file is provided, extract cropped spots and y value for Training and validation
         # Else utilize provided data already cropped
         if xml_dir is not None:
-            data_train = training_dataset.create_cropped_list(xml_dir)
-            print("Train Dataset size:", len([g for g in data_train]))
-            data_val = val_dataset.create_cropped_list(xml_dir_val)
-            print("Val Dataset size:", len([g for g in data_val]))
+            print("Cropping train images ...\n")
+            data_train = tf.data.Dataset.from_generator(training_dataset.create_cropped_list,
+                                                        output_signature=(tf.TensorSpec(shape=(None, self.config.SIZE[0], self.config.SIZE[1], self.config.SIZE[2]),
+                                                                                        dtype=tf.int32),
+                                                                          tf.TensorSpec(shape=(None, 2), dtype=tf.int32)
+                                                                          )
+                                                        ).repeat()
+            print("Train images cropped\n")
+            print("Cropping validation images ...\n")
+            data_val = tf.data.Dataset.from_generator(val_dataset.create_cropped_list,
+                                                      output_signature=(tf.TensorSpec(shape=(None, self.config.SIZE[0], self.config.SIZE[1], self.config.SIZE[2]),
+                                                                                      dtype=tf.int32),
+                                                                        tf.TensorSpec(shape=(None, 2), dtype=tf.int32)
+                                                                        )
+                                                      ).repeat()
+            print("Validation images cropped\n")
         else:
             cropped_image, y_true = np.array(training_dataset.images), np.array(training_dataset.y_true)
             cropped_image_val, y_true_val = np.array(val_dataset.images), np.array(val_dataset.y_true)
@@ -149,6 +162,7 @@ class CNN:
         return self.model.fit(data_train, epochs=self.config.EPOCHS,
                               validation_data=(data_val),
                               shuffle=self.config.SHUFFLE, callbacks=cp_callback,
+                              steps_per_epoch=3460, validation_steps=1728
                               )
 
     def detect(self, predicts_data, xml_path=None, weight_path=None):

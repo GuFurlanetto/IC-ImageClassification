@@ -223,7 +223,7 @@ class Dataset:
         for image in cropped_image:
             self.min_size = min(self.min_size, image.shape)
 
-    def create_cropped_list(self, xml_path):
+    def create_cropped_list(self):
         """
         Create a cropped list containing all the spots in the dataset images
 

@@ -132,21 +132,12 @@ class CNN:
         # If XML file is provided, extract cropped spots and y value for Training and validation
         # Else utilize provided data already cropped
         if xml_dir is not None:
-            print("Cropping train images ...\n")
-            data_train = tf.data.Dataset.from_generator(training_dataset.create_cropped_list,
-                                                        output_signature=(tf.TensorSpec(shape=(None, self.config.SIZE[0], self.config.SIZE[1], self.config.SIZE[2]),
-                                                                                        dtype=tf.int32),
-                                                                          tf.TensorSpec(shape=(None, 2), dtype=tf.int32)
-                                                                          )
-                                                        ).repeat()
+            print("Cropping train images ...")
+            data_train = training_dataset.create_cropped_list()
             print("Train images cropped\n")
-            print("Cropping validation images ...\n")
-            data_val = tf.data.Dataset.from_generator(val_dataset.create_cropped_list,
-                                                      output_signature=(tf.TensorSpec(shape=(None, self.config.SIZE[0], self.config.SIZE[1], self.config.SIZE[2]),
-                                                                                      dtype=tf.int32),
-                                                                        tf.TensorSpec(shape=(None, 2), dtype=tf.int32)
-                                                                        )
-                                                      ).repeat()
+
+            print("Cropping validation images ...")
+            data_val = val_dataset.create_cropped_list()
             print("Validation images cropped\n")
         else:
             cropped_image, y_true = np.array(training_dataset.images), np.array(training_dataset.y_true)
@@ -161,8 +152,8 @@ class CNN:
         # train the model using hyper-parameter in the Config
         return self.model.fit(data_train, epochs=self.config.EPOCHS,
                               validation_data=(data_val),
-                              shuffle=self.config.SHUFFLE, callbacks=cp_callback,
-                              steps_per_epoch=3460, validation_steps=1728
+                              shuffle=self.config.SHUFFLE, callbacks=cp_callback
+                              #steps_per_epoch=3280, validation_steps=1645, batch_size=32
                               )
 
     def detect(self, predicts_data, xml_path=None, weight_path=None):
@@ -180,7 +171,7 @@ class CNN:
         # Get all spots cropped from the image if a path is provided
         # Else assume images already cropped
         if xml_path is not None:
-            cropped_image, y_true = predicts_data.create_cropped_list(xml_path)
+            cropped_image = predicts_data.create_cropped_list(True)
         else:
             cropped_image = predicts_data
 
@@ -193,7 +184,7 @@ class CNN:
             self.model.load_weights(self.last_weight)
 
         # Make predictions
-        predicts = self.model.predict(cropped_image)
+        predicts = self.model.predict(cropped_image, verbose=1)
         predicts = np.argmax(predicts, axis=1)
 
         if 'y_true' in locals():

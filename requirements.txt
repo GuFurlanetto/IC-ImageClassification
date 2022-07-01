@@ -6,3 +6,4 @@ IPython
 pyqt5
 sewar
 pyaml
+scikit-learn

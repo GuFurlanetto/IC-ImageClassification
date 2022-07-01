@@ -1,6 +1,6 @@
 from tensorflow.keras.applications import mobilenet, resnet50, vgg16
 from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Conv2D, \
-                                    Input, MaxPooling2D, Flatten, BatchNormalization
+    Input, MaxPooling2D, Flatten, BatchNormalization
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.callbacks import ModelCheckpoint
 from tensorflow.keras.optimizers import SGD
@@ -11,7 +11,6 @@ import numpy as np
 import cv2
 import os
 import sys
-
 
 
 class CNN:
@@ -36,12 +35,29 @@ class CNN:
             self.model = Sequential()
             self.model.add(Conv2D(32, (3, 3), activation='relu',
                                   input_shape=(input_size[0], input_size[1], input_size[2]),
-                                  kernel_initializer='he_uniform'))
+                                  kernel_initializer='he_uniform',
+                                  kernel_regularizer=tf.keras.regularizers.L1(0.01),
+                                  activity_regularizer=tf.keras.regularizers.L2(0.01)
+                                  ))
+            self.model.add(Conv2D(16, (1, 1), activation='relu'))
             self.model.add(BatchNormalization())
-            self.model.add(MaxPooling2D((2, 2)))
-            self.model.add(Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_uniform'))
+            self.model.add(MaxPooling2D((3, 3)))
+            self.model.add(Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_uniform',
+                                  kernel_regularizer=tf.keras.regularizers.L1(0.01),
+                                  activity_regularizer=tf.keras.regularizers.L2(0.01)
+                                  ))
             self.model.add(BatchNormalization())
-            self.model.add(MaxPooling2D((2, 2)))
+            self.model.add(MaxPooling2D((3, 3)))
+        # if self.config.ARCHITECTURE == 'cnn':  # Basic CNN
+        #     self.model = Sequential()
+        #     self.model.add(Conv2D(32, (3, 3), activation='relu',
+        #                           input_shape=(input_size[0], input_size[1], input_size[2]),
+        #                           kernel_initializer='he_uniform'))
+        #     self.model.add(BatchNormalization())
+        #     self.model.add(MaxPooling2D((2, 2)))
+        #     self.model.add(Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_uniform'))
+        #     self.model.add(BatchNormalization())
+        #     self.model.add(MaxPooling2D((2, 2)))
 
         elif self.config.ARCHITECTURE == 'resnet50':  # Second tested model RESNET50
             new_input = Input(shape=(input_size))
@@ -79,7 +95,7 @@ class CNN:
             sys.exit("Error: Architecture not found")
 
         self.model.add(Flatten())
-        self.model.add(Dense(50, activation='relu'))
+        self.model.add(Dense(10, activation='relu'))
         self.model.add(Dense(2, activation='softmax'))
 
         self.model.summary()
@@ -123,8 +139,8 @@ class CNN:
         # Save config used for training and create a Checkpoint and plot callbacks
         save_config(self.config, 'Config', last_log_dir + '/')
         cp_callback = ModelCheckpoint(filepath=last_log_dir + '/',
-                                                         save_weights_only=True,
-                                                         verbose=1)
+                                      save_weights_only=True,
+                                      verbose=1)
 
         # Compile the model with hyper-parameters given in the Config
         self.model.compile(optimizer=self.config.OPTIMIZER, loss=self.config.LOSS, metrics=['accuracy'])
@@ -133,11 +149,39 @@ class CNN:
         # Else utilize provided data already cropped
         if xml_dir is not None:
             print("Cropping train images ...")
-            data_train = training_dataset.create_cropped_list()
+            data_train = tf.data.Dataset.from_generator(training_dataset.create_cropped_list,
+                                                        output_signature=(tf.TensorSpec(shape=(1, self.config.SIZE[0],
+                                                                                               self.config.SIZE[1],
+                                                                                               self.config.SIZE[2]),
+                                                                                        dtype=tf.float32),
+                                                                          tf.TensorSpec(shape=(1,2), dtype=tf.int64)))
+            # Conta a quantidade de exemplos no dataset de treino
+            # Contagem atual: 104960
+            # count = 0
+            # for tuple in data_train:
+            #     count += 1
+            #
+            # print(count)
+
+            data_train.batch(128, drop_remainder=True).repeat()
+
             print("Train images cropped\n")
 
             print("Cropping validation images ...")
-            data_val = val_dataset.create_cropped_list()
+            data_val = tf.data.Dataset.from_generator(val_dataset.create_cropped_list,
+                                                        output_signature=(tf.TensorSpec(shape=(1, self.config.SIZE[0],
+                                                                                               self.config.SIZE[1],
+                                                                                               self.config.SIZE[2]),
+                                                                                        dtype=tf.float32),
+                                                                          tf.TensorSpec(shape=(1,2), dtype=tf.int64)))
+            # Conta a quantidade de exemplos no dataset de validação
+            # Contagem atual: 52640
+            # count = 0
+            # for tuple in data_val:
+            #     count += 1
+            #
+            # print(count)
+            data_val.batch(128, drop_remainder=True).repeat()
             print("Validation images cropped\n")
         else:
             cropped_image, y_true = np.array(training_dataset.images), np.array(training_dataset.y_true)
@@ -152,8 +196,8 @@ class CNN:
         # train the model using hyper-parameter in the Config
         return self.model.fit(data_train, epochs=self.config.EPOCHS,
                               validation_data=(data_val),
-                              shuffle=self.config.SHUFFLE, callbacks=cp_callback
-                              #steps_per_epoch=3280, validation_steps=1645, batch_size=32
+                              shuffle=self.config.SHUFFLE, callbacks=cp_callback,
+                              steps_per_epoch=104960//128, validation_steps=52640//128
                               )
 
     def detect(self, predicts_data, xml_path=None, weight_path=None):
@@ -191,4 +235,3 @@ class CNN:
             return predicts, y_true, self.last_weight
         else:
             return predicts, self.last_weight
-

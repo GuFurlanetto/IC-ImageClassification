@@ -513,10 +513,10 @@
       <angle d="-83" />
     </rotatedRect>
     <contour>
-      <point x="1005" y="39" />
+      <point x="1005" y="20" />
       <point x="1000" y="81" />
       <point x="1058" y="88" />
-      <point x="1064" y="33" />
+      <point x="1064" y="20" />
     </contour>
   </space>
 </parking>

@@ -90,7 +90,7 @@ class Config:
     MOMENTUM = 0.9
 
     # String(name of optimizer) or optimizer instance
-    OPTIMIZER = tk.optimizers.Adam(learning_rate=1e-3)
+    OPTIMIZER = tk.optimizers.Adam(learning_rate=LEARNING_RATE)
 
     # Loss function used in the model. Can be typically a tf.keras.losses. but can be a tf.keras.losses.Loss instance
     LOSS = tk.losses.BinaryCrossentropy()

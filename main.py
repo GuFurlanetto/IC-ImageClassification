@@ -1,6 +1,7 @@
 from model.config import Config
 from model.utils import training_transfer, get_metrics, save_in_txt, Dataset
 from model.cnn import CNN
+import matplotlib.pyplot as plt
 import numpy as np
 
 dataset_dir_train = '/home/gustavo/Documentos/IC/SegmentedModel/dataset'
@@ -27,8 +28,9 @@ predict_data.load_custom(dataset_dir_train, "predict")
 print("Predicts data loaded\n")
 
 my_config = Config()
-my_config.LEARNING_RATE = 0.00001
-my_config.EPOCHS = 1
+my_config.LEARNING_RATE = 0.01
+my_config.EPOCHS = 15
+my_config.ARCHITECTURE = 'cnn'
 my_config.ARCHITECTURE = 'cnn'
 
 print("Building model ...")
@@ -37,8 +39,13 @@ my_model.build(train_data.min_size)
 print("Model ready for training\n")
 
 print("Training model ...")
-my_model.train(train_data, val_data, log_dir, xml_train, val_xml)
+history = my_model.train(train_data, val_data, log_dir, xml_train, val_xml)
 print("Model trained\n")
+
+plt.plot(history.history["loss"], label="Training Loss")
+plt.plot(history.history["val_loss"], label="Validation Loss")
+plt.legend()
+plt.show()
 
 print("Evaluating model ...")
 results, _ = my_model.detect(predict_data, pred_xml)

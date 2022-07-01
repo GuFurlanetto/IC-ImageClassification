@@ -52,11 +52,7 @@ while video_file.isOpened():
         break
 
     # Calculate if the are any changes from spots capture in the last frame
-    ###### Test #######
-    frame = equalizeColor(frame)
-    ###################
     changes, index, images = get_image_similarity(frame, comparison_dir, sys.argv[2], custom_config.SIZE)
-    frame = increase_brightness(frame, 90)
     # If no changes are detected, reuse predicts from last frame
     # Else redo classification in the spots that have benn detected changes
     if not changes:
@@ -97,8 +93,3 @@ print("Média de tempo por frame:", sum(tempo) / totaisFrames)
 print("Tempo de processamento:", time.process_time() - t)
 video_file.release()
 make_video(final_frame_list, fps)
-
-
-save_in_txt(statistics, '/home/gustavo/Documentos/IC/SegmentedModel/logTeste29122021_16:55(last)/')
-
-

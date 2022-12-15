@@ -12,6 +12,7 @@ import os
 import re
 import gc
 import itertools
+import json
 
 
 ##################################################
@@ -83,8 +84,41 @@ def get_points_from_xml(xml_file):
     return point_a, point_b, point_c, point_d, occupied_space
 
 
-def get_points_from_json(json_path):
-    pass
+def get_points_from_json(json_file, img_name, data_dir):
+    with open(json_file, "r") as f:
+        ann_file = json.load(f)
+
+    for image in ann_file:
+        if img_name in image['image']:
+            found = True
+            break
+        else:
+            found = False
+
+    assert found == True
+    
+    img = cv2.imread(data_dir + "/" + os.path.basename(image['image'])[9:])
+    pt_A = []
+    pt_B = []
+    pt_C = []
+    pt_D = []
+    y_true = []
+
+    width, height = img.shape[:2] 
+    for point in image['label']:
+        pta, ptb, ptc, ptd = point['points']
+        pt_A.append([int((pta[0] / 100) * height), int((pta[1] / 100) * width)])
+        pt_B.append([int((ptb[0] / 100) * height), int((ptb[1] / 100) * width)])
+        pt_C.append([int((ptc[0] / 100) * height), int((ptc[1] / 100) * width)])
+        pt_D.append([int((ptd[0] / 100) * height), int((ptd[1] / 100) * width)])
+
+        if point['polygonlabels'][0] == 'occupied':
+            y_true.append(1)
+        else:
+            y_true.append(0)
+    
+    return pt_A, pt_B, pt_C, pt_D, y_true
+
 
 
 #############################################################
@@ -153,11 +187,16 @@ def image_generator(dataset_dir):
 
     # Load all images from de subset
     for filename in sorted(os.listdir(dataset_dir), reverse=True):
+        if filename.endswith(".json"):
+            continue
         if filename.endswith(".xml"):
             temp = os.path.join(dataset_dir, filename)
             continue
         else:
             img = cv2.imread(os.path.join(dataset_dir, filename))
+            if "2015" in filename or "2016" in filename:
+                temp = [os.path.basename(filename), os.path.join(dataset_dir, "result.json")]
+            
             assert temp is not None
             yield img, temp
 
@@ -190,7 +229,7 @@ class Dataset:
 
         # train, validation or predicts dataset?
         if subset is not None:
-            assert subset in ["val", "train", "predict"]
+            assert subset in ["val", "train", "test"]
             dataset_dir = os.path.join(dataset_dir, subset)
 
         self.dataset_dir = dataset_dir
@@ -214,7 +253,7 @@ class Dataset:
         """
         Calculate the min size of the dataset images
         """
-        img, _ = next(self.images)
+        img = cv2.imread("2013-04-15_16_10_11.jpg")
 
         # Crop all parking lot spots on the image
         cropped_image = get_images_spaces(img, self.pt_A,
@@ -224,6 +263,16 @@ class Dataset:
         self.min_size = cropped_image[0].shape
         for image in cropped_image:
             self.min_size = min(self.min_size, image.shape)
+            
+    def data_size(self):
+        self.load_custom(self.dataset_dir)
+
+        total_len = 0
+        for _, xml_file in self.images:
+            spots, _, _, _, _ = get_points_from_xml(xml_file)
+            total_len += len(spots)
+
+        return total_len
 
     def create_cropped_list(self, predict=False):
         """
@@ -237,31 +286,34 @@ class Dataset:
 
         # Crop and resize all spots by the minimum size of the dataset
         for img, xml_file in self.images:
-            # TODO: Add Night Filter
-            # if condition:
-            #     img = night_filter(img)
+            if type(xml_file) == list:
+                self.pt_A, self.pt_B, self.pt_C, self.pt_D, y = get_points_from_json(xml_file[1], xml_file[0], self.dataset_dir)
+            else:
+                self.pt_A, self.pt_B, self.pt_C, self.pt_D, y = get_points_from_xml(xml_file)
 
+                
             crop = np.array(get_images_spaces(img, self.pt_A, self.pt_B,
                                               self.pt_C, self.pt_D))
-            resize_image(crop, self.min_size[1], self.min_size[0])
+            crop = resize_image(crop, self.min_size[0], self.min_size[1])
 
             # Normalize all pixels values
             crop = crop / 255.0
 
-            _, _, _, _, y = get_points_from_xml(xml_file)
-
             # Transform y value to be accepted by the model
-            for i in range(len(y)):
-                y[i] = np.array([1, 0]) if y[i] == 1 else np.array([0, 1])
+            # for i in range(len(y)):
+            #     y[i] = np.array([0, 1]) if y[i] == 1 else np.array([1, 0])
+
+            # y = np.array(y)
 
             for i in range(len(crop)):
-                crop[i] = np.expand_dims(crop[i], axis=0)
-                y[i] = np.expand_dims(y[i], axis=0)
+                #show_image(str(y[i]), crop[i])
+                crop_new_shape = np.expand_dims(crop[i], axis=0)
+                y_new_shape = np.expand_dims(y[i], axis=0)
 
                 if predict:
-                    yield crop[i]
+                    yield crop_new_shape
                 else:
-                    yield crop[i], y[i]
+                    yield crop_new_shape, y_new_shape
 
 
     def return_y_true(self):
@@ -271,64 +323,19 @@ class Dataset:
 
         for img, xml_file in self.images:
 
-            _, _, _, _, y = get_points_from_xml(xml_file)
+            if type(xml_file) == list:
+                _, _, _, _, y = get_points_from_json(xml_file[1], xml_file[0], self.dataset_dir)
+            else:
+                _, _, _, _, y = get_points_from_xml(xml_file)
 
             # Transform y value to be accepted by the model
-            for i in range(len(y)):
-                y[i] = np.array([1, 0]) if y[i] == 1 else np.array([0, 1])
-                y_final.append(y[i])
+            # for i in range(len(y)):
+            #     y[i] = np.array([0, 1]) if y[i] == 1 else np.array([1, 0])
+            #     y_final.append(y[i])
+
+            y_final.extend(y)
 
         return y_final
-
-
-    # def create_cropped_list(self, xml_path):
-    #     """
-    #     Create a cropped list containing all the spots in the dataset images
-    #
-    #     :param xml_path: Folder path containing all coordinates for each image spots
-    #     :return cropped_images: Cropped spots from all images in the dataset
-    #     :return y_true: y value for all cropped images, indicating occupation status
-    #     """
-    #
-    #     cropped_images = []
-    #     y_true = []
-    #
-    #     # Crop and resize all spots by the minimum size of the dataset
-    #     for img in self.images:
-    #         # TODO: Add Night Filter
-    #         # if condition:
-    #         #     img = night_filter(img)
-    #
-    #         crop = np.array(get_images_spaces(img, self.pt_A, self.pt_B,
-    #                                           self.pt_C, self.pt_D))
-    #         resize_image(crop, self.min_size[1], self.min_size[0])
-    #
-    #         # Normalize all pixels values
-    #         crop = crop / 255.0
-    #
-    #         cropped_images.extend(crop)
-    #
-    #     # Get y value from the images in the dataset
-    #     for filename in sorted(os.listdir(xml_path), reverse=True):
-    #
-    #         if not filename.endswith('.xml'):
-    #             continue
-    #
-    #         fullname = os.path.join(xml_path, filename)
-    #         _, _, _, _, y = get_points_from_xml(fullname)
-    #         y_true.extend(y)
-    #
-    #     # Transform y value to be accepted by the model
-    #     for i in range(len(y_true)):
-    #         if y_true[i] == 1:
-    #             y_true[i] = np.array([0, 1])
-    #         else:
-    #             y_true[i] = np.array([1, 0])
-    #
-    #     cropped_images = np.array(cropped_images)
-    #     y_true = np.array(y_true)
-    #
-    #     return cropped_images, y_true
 
     def draw_all_rectangles(self, predicts):
         """
@@ -337,21 +344,27 @@ class Dataset:
         :param predicts: list of predicts generated by the model
         """
         frame_list = []
-        i = 0
+        last = 0
         self.load_custom(self.dataset_dir)
 
         # Go through all images drawing the rectangles
         for image, xml in self.images:
-            predicts_in_use = predicts[i * 40: (i + 1) * 40]
 
+            if type(xml) == list:
+                self.pt_A, self.pt_B, self.pt_C, self.pt_D, _ = get_points_from_json(xml[1], xml[0], self.dataset_dir)
+            else:
+                self.pt_A, self.pt_B, self.pt_C, self.pt_D, _ = get_points_from_xml(xml)
+
+            predicts_in_use = predicts[last: last + len(self.pt_A)]
+            last += len(self.pt_A)
             image_draw = draw_rectangle(image, [self.pt_A, self.pt_B,
                                                 self.pt_C, self.pt_D],
                                         predicts_in_use)
 
             frame_list.append(image_draw)
-            i += 1
+            
 
-        make_video(frame_list, 2)
+        return frame_list
 
     def prepare_image_puc(self, dataset_dir, limits=None):
         """
@@ -454,9 +467,13 @@ def resize_image(images, width, height):
     :return resized_images: List containing all images with new sizes
     """
 
-    for i in range(len(images)):
-        images[i] = cv2.resize(images[i], (width, height), interpolation=cv2.INTER_AREA)
+    cropped_resize = []
 
+    for i in range(len(images)):
+        tmp = cv2.resize(images[i], dsize=(width, height), interpolation=cv2.INTER_AREA)
+        cropped_resize.append(tmp)
+
+    return np.array(cropped_resize)
 
 def night_filter(image):
     pass
@@ -650,7 +667,7 @@ def save_in_txt(list_to_save, path):
 # Statistics                                           #
 ########################################################
 
-def get_metrics(predicts, y_true, size):
+def get_metrics(predicts, y_true, test_data, data_dir):
     """
     Calculates and print performance metrics on predictions.
     Metrics to be displayed:
@@ -672,34 +689,51 @@ def get_metrics(predicts, y_true, size):
     # True positive, False positive, True negative, False negative
     tp, fp, tn, fn = 0, 0, 0, 0
 
-    for i in range(len(predicts)):
+    # Reset generator
+    test_data.load_custom(test_data.dataset_dir)
+    last_image = 0
+    total_spots = 0
+    for _, xml_file in test_data.images:
 
-        # Calculates each image ACC
-        if (i % size == 0 and i != 0) or (i == len(predicts) - 1):
-            images_acc.append(image_correct_label / size)
-            image_correct_label = 0
-
-        # Compare predicts to results and increase all related counters
-        if predicts[i] == y_true[i][1]:
-            global_correct_label += 1
-            image_correct_label += 1
-
-            # Evaluate True positive and True negative
-            if predicts[i] == 1:
-                tp += 1
-            else:
-                tn += 1
+        if type(xml_file) == list:
+            pt_A, _, _, _, y = get_points_from_json(xml_file[1], xml_file[0], data_dir)
         else:
+            pt_A, _, _, _, y = get_points_from_xml(xml_file)
 
-            # Evaluate False positive and False negative
-            if y_true[i][1] == 1:
-                fn += 1
+        spot_number = len(pt_A)
+        total_spots += spot_number
+        predicts_in_use = predicts[last_image: last_image + spot_number]
+        last_image += spot_number
+
+        for j in range(len(predicts_in_use)):
+            # Compare predicts to results and increase all related counters
+            if predicts_in_use[j] == y[j]:
+                global_correct_label += 1
+                image_correct_label += 1
+
+                # Evaluate True positive and True negative
+                if predicts[j] == 1:
+                    tp += 1
+                else:
+                    tn += 1
             else:
-                fp += 1
 
-    metrics.append([global_correct_label / len(y_true), 'Global Acc'])
+                # Evaluate False positive and False negative
+                if y[j] == 1:
+                    fn += 1
+                else:
+                    fp += 1
+
+        images_acc.append(image_correct_label / spot_number)
+        image_correct_label = 0
+
+    metrics.append([global_correct_label / total_spots, 'Global Acc'])
     metrics.append([images_acc, 'Single image Acc'])
     metrics.append([[tp, fp, tn, fn], 'Confusion Matrix [TP, FP, TN, FN]'])
+    metrics.append([tp / (tp + fp), "Precision"])
+    metrics.append([tp / (tp + fn), "Recall"])
+    metrics.append([(2*tp) / (2*tp + fp + fn),"F1-Score"])
+
 
     return metrics
 

@@ -75,8 +75,8 @@ class Config:
     LEARNING_MOMENTUM = 0.9
 
     # Weight decay regularization
-    WEIGHT_DECAY = 0.0001
-
+    L1_TERM = 0.001
+    L2_TERM = 0.001
     # Gradient norm clipping
     GRADIENT_CLIP_NORM = 5.0
 
@@ -89,6 +89,9 @@ class Config:
 
     MOMENTUM = 0.9
 
+    EXPERIMENT_NAME = "None"
+    RUN_NAME = "None"
+
     # String(name of optimizer) or optimizer instance
     OPTIMIZER = tk.optimizers.Adam(learning_rate=LEARNING_RATE)
 
@@ -98,6 +101,8 @@ class Config:
     # List of all metrics used to evaluate the model
     METRICS = [tk.metrics.BinaryAccuracy(),
                tk.metrics.FalseNegatives()]
+
+    THRESHOLD = 0.9
 
     # Number of epochs to val the model
     EPOCHS = 20

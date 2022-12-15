@@ -1,5 +1,0 @@
-!!python/object:__main__.CustomConfig
-BATCH_SIZE: 1
-SIZE: !!python/tuple
-- 41
-- 79
